@@ -1,0 +1,8 @@
+{
+  "name": "CODE FORCE AWAKEN — AIKYA Coding Championship",
+  "description": "AIKYA's premier individual programming competition with a futuristic galactic coding mission. 4 Rounds of algorithmic mastery.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
