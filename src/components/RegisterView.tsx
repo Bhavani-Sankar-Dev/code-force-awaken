@@ -28,7 +28,17 @@ export const RegisterView: React.FC<RegisterViewProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       });
-      const data = await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.toLowerCase().includes('application/json')) {
+        throw new Error(
+          'The registration API is unavailable. Deploy the Node.js/Express server and route /api requests to it; static-only hosting cannot register participants.'
+        );
+      }
+      const data = await res.json() as {
+        error?: string;
+        participantCode?: unknown;
+        participant?: Participant;
+      };
       if (!res.ok) throw new Error(data.error || 'Registration failed.');
       if (typeof data.participantCode !== 'string' || !data.participant) {
         throw new Error('Registration succeeded, but the recovery ID was not returned. Contact the event organizer before retrying.');
@@ -37,7 +47,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({
       onRegisterSuccess(data.participant, data.participantCode);
     } catch (err: unknown) {
       sound.playWarning();
-      setErrorMessage((err as Error).message || 'An error occurred during registration.');
+      setErrorMessage(err instanceof Error ? err.message : 'An error occurred during registration.');
     } finally {
       setSubmitting(false);
     }
