@@ -56,7 +56,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ onRefreshState }) => {
     stats: { totalParticipants: number; completedRounds: number; qualifiedCount: number };
     participants: AdminParticipant[];
     eventConfig: EventConfig;
-    round4Config: { transformationRuleText: string; expectedFinalKey: string };
   } | null>(null);
 
   // Form states
@@ -64,8 +63,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ onRefreshState }) => {
   const [r3MinPercent, setR3MinPercent] = useState(40);
   const [r2TimerMinutes, setR2TimerMinutes] = useState(20);
   const [r3TimerMinutes, setR3TimerMinutes] = useState(20);
-  const [ruleText, setRuleText] = useState('');
-  const [finalKey, setFinalKey] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const fetchAdminData = async () => {
@@ -89,10 +86,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ onRefreshState }) => {
         setR3MinPercent(data.eventConfig.round3MinPercent);
         setR2TimerMinutes(data.eventConfig.round2TimerMinutes);
         setR3TimerMinutes(data.eventConfig.round3TimerMinutes);
-      }
-      if (data.round4Config) {
-        setRuleText(data.round4Config.transformationRuleText);
-        setFinalKey(data.round4Config.expectedFinalKey);
       }
     } catch (err) {
       console.error(err);
@@ -310,8 +303,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ onRefreshState }) => {
           round3MinPercent: r3MinPercent,
           round2TimerMinutes: r2TimerMinutes,
           round3TimerMinutes: r3TimerMinutes,
-          transformationRuleText: ruleText,
-          expectedFinalKey: finalKey
         })
       });
       if (res.ok) {
@@ -630,7 +621,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onRefreshState }) => {
             <div>
               <label className="block text-slate-400 mb-1">Round 2 Qualification</label>
               <p className="w-full p-2.5 rounded-lg bg-slate-900 border border-slate-700 text-blue-300">
-                All 3 fixed-input answers must be correct.
+                Trace all 3 Python snippets and enter their exact printed outputs.
               </p>
             </div>
             <div>
@@ -642,23 +633,9 @@ export const AdminView: React.FC<AdminViewProps> = ({ onRefreshState }) => {
                 className="w-full p-2.5 rounded-lg bg-slate-900 border border-slate-700 text-purple-300"
               />
             </div>
-            <div>
-              <label className="block text-slate-400 mb-1">Expected Round 4 Final Mission Key</label>
-              <input
-                type="text"
-                value={finalKey}
-                onChange={e => setFinalKey(e.target.value)}
-                className="w-full p-2.5 rounded-lg bg-slate-900 border border-slate-700 text-amber-300 font-bold"
-              />
-            </div>
-            <div>
-              <label className="block text-slate-400 mb-1">Round 4 Dynamic Transformation Rule Description</label>
-              <textarea
-                value={ruleText}
-                onChange={e => setRuleText(e.target.value)}
-                className="w-full p-2.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 h-20"
-              />
-            </div>
+            <p className="rounded-lg border border-amber-500/30 bg-slate-900 p-3 text-amber-200">
+              Round 4 is one medium sliding-window challenge answered in plain English. The server checks required algorithm concepts; it does not execute code.
+            </p>
           </div>
 
           <button

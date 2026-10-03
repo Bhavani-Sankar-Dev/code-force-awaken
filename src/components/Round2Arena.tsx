@@ -348,39 +348,28 @@ export const Round2Arena: React.FC<Round2ArenaProps> = ({
                   </div>
                 </div>
 
-                <div className="space-y-2 pt-2 border-t border-slate-800 text-xs font-mono">
-                  <div>
-                    <span className="text-slate-500 uppercase">Input Format: </span>
-                    <span className="text-slate-300">{currentProblem.inputFormat}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 uppercase">Output Format: </span>
-                    <span className="text-slate-300">{currentProblem.outputFormat}</span>
-                  </div>
+                <div className="space-y-2 pt-2 border-t border-slate-800">
+                  <div className="text-[11px] font-mono uppercase text-slate-500">Python code — trace it without running it</div>
+                  <pre className="max-h-96 overflow-auto whitespace-pre rounded-xl border border-slate-800 bg-[#060b19] p-3 text-xs leading-relaxed text-cyan-200">{currentProblem.traceCode}</pre>
                 </div>
-
-                <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 font-mono text-xs space-y-1">
-                  <div className="text-slate-500 uppercase">Sample Input:</div>
-                  <pre className="text-cyan-300 bg-black/40 p-2 rounded">{currentProblem.sampleInput}</pre>
-                </div>
-                <p className="text-[11px] text-amber-200/80 font-mono">Enter the expected output for the sample input—not Python source code. This round does not execute submitted programs.</p>
+                <p className="text-[11px] text-amber-200/80 font-mono">Enter exactly what this Python code prints. The submitted answer is never executed.</p>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Fixed-input answer */}
+          {/* Right Column: Traced-output answer */}
           <div className="lg:col-span-7 space-y-4">
             <div className="cyber-card p-5 rounded-2xl border-blue-500/30 space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="px-3 py-1.5 rounded-lg bg-blue-600 text-xs font-mono font-bold text-white">
-                  SAMPLE OUTPUT ANSWER
+                  CODE OUTPUT
                 </div>
                 <span className="text-xs font-mono text-slate-400">Answer is checked after final submission</span>
               </div>
 
               <div className="rounded-xl border border-slate-700 bg-[#060b19] p-5 space-y-3">
                 <label htmlFor={`answer-${currentProblem.problemId}`} className="block text-xs font-mono uppercase text-slate-400">
-                  Type the exact output for the displayed sample input
+                  Type the exact output printed by the displayed Python code
                 </label>
                 <textarea
                   id={`answer-${currentProblem.problemId}`}
@@ -390,11 +379,11 @@ export const Round2Arena: React.FC<Round2ArenaProps> = ({
                   maxLength={500}
                   rows={3}
                   className="w-full resize-y rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 font-mono text-sm text-cyan-200 outline-none focus:border-blue-400 disabled:opacity-60"
-                  placeholder="Type only the expected output"
+                  placeholder="Type the printed output"
                 />
               </div>
 
-              <p className="text-xs text-slate-400">This simplified judging format checks the provided answer only; it cannot validate arbitrary Python solutions or other unseen inputs.</p>
+              <p className="text-xs text-slate-400">The code is provided for tracing only. The server checks your output against its predefined answer; it never executes participant code.</p>
             </div>
           </div>
         </div>

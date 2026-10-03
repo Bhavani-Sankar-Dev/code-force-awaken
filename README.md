@@ -17,7 +17,7 @@ React + TypeScript + Vite frontend with an Express/TypeScript server. The server
 
 ## Competition answer checking
 
-Participant Python is not compiled or executed. Round 2 accepts the expected output for each published sample input; Round 3 accepts configured code fragments; Round 4 accepts outputs for its displayed DSA inputs. These predefined-answer checks are intentionally limited and do not establish that a complete program works for arbitrary or hidden test cases.
+Participant Python is not compiled or executed. Round 2 asks participants to trace published Python snippets and enter their exact printed output. Round 3 accepts configured code fragments. Round 4 accepts a plain-English explanation of a sliding-window algorithm, checked against required concept phrases; this heuristic is not semantic evaluation and can accept or reject equivalent wording imperfectly.
 
 Answer keys are kept in the server-only `server/answerKeys.ts`; do not import that file or `src/data/competitionData.ts` from frontend code.
 
@@ -29,7 +29,7 @@ Before deploying a live competition:
 
 1. Create a PostgreSQL database on a free tier, such as Neon. Use its pooled connection string if available; keep it private.
 2. Back up `db_state.json` and verify the backup. Put `DATABASE_URL` in the local untracked `.env`, then run `npm run migrate:state` once. The importer validates identities and sessions, initializes the schema, and refuses to overwrite an initialized database.
-3. In Netlify site environment variables, set `DATABASE_URL`, a private `ADMIN_PASSCODE`, and `FRONTEND_ORIGINS` to the exact canonical site origin (for example, `https://your-site.netlify.app`, without a trailing slash). For deploy previews, configure that deploy context with the exact preview origin if browser testing there is needed.
+3. In Netlify site environment variables, set `DATABASE_URL` and a private `ADMIN_PASSCODE` for the **Functions** scope and **Production** context. The Function automatically allows Netlify's `URL` origin; set `FRONTEND_ORIGINS` to the exact HTTPS origin when using a custom domain or additional frontend origins. Configure deploy-preview origins in the matching deploy context if browser testing there is needed.
 4. Deploy from the repository root. `netlify.toml` builds the Vite frontend, publishes `dist`, builds the Express function, and rewrites `/api/*` to it. Leave `VITE_API_BASE_URL` unset so frontend requests remain same-origin.
 5. Confirm `/api/state` returns JSON, then exercise participant registration/session restore, admin login, duplicate rejection, and all four rounds before opening registration.
 

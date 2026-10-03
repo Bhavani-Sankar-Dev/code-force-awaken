@@ -285,9 +285,10 @@ export const round1Questions: Round1Question[] = [
 export const round2Problems: Round2Problem[] = [
   {
     problemId: "r2-p1",
-    title: "EVEN NUMBER CHECK",
-    difficulty: "Easy",
-    description: "Given an integer N, determine whether the number is even or odd.\n\nPrint:\n- \"EVEN\" if N is even\n- \"ODD\" if N is odd",
+    title: "Trace the running total",
+    difficulty: "Medium",
+    description: "Trace the Python code from top to bottom. What exact value does it print?",
+    traceCode: "values = [2, 5, 3, 7, 4]\ntotal = 0\n\nfor i in range(1, len(values)):\n    if values[i] > values[i - 1]:\n        total += values[i] - values[i - 1]\n\nprint(total)",
     inputFormat: "A single integer N.",
     outputFormat: "Print EVEN or ODD.",
     sampleInput: "4",
@@ -314,9 +315,10 @@ export const round2Problems: Round2Problem[] = [
   },
   {
     problemId: "r2-p2",
-    title: "SECOND LARGEST NUMBER",
+    title: "Trace the frequency filter",
     difficulty: "Medium",
-    description: "Given N integers, find the second largest DISTINCT number.\n\nInput Format:\nFirst line contains N.\nSecond line contains N integers.\n\nOutput Format:\nPrint the second largest distinct integer. If fewer than 2 distinct integers exist, print -1.",
+    description: "Trace the dictionary updates and list comprehension. What exact value does the program print?",
+    traceCode: "values = [2, 5, 2, 8, 5, 8, 8]\ncounts = {}\n\nfor value in values:\n    counts[value] = counts.get(value, 0) + 1\n\nselected = [value for value in counts if counts[value] == 2]\nprint(sum(selected))",
     inputFormat: "First line contains N.\nSecond line contains N integers.",
     outputFormat: "Print the second largest distinct integer.",
     sampleInput: "5\n1 2 3 4 5",
@@ -343,9 +345,10 @@ export const round2Problems: Round2Problem[] = [
   },
   {
     problemId: "r2-p3",
-    title: "BUBBLE SORT",
+    title: "Trace the grouping logic",
     difficulty: "Medium",
-    description: "Given N integers, sort the array in ascending order using the Bubble Sort algorithm.\n\nParticipants must implement Bubble Sort themselves.\n\nInput Format:\nFirst line contains N.\nSecond line contains N integers.\n\nOutput Format:\nPrint the sorted array elements separated by single spaces.",
+    description: "Trace how sorting each word creates dictionary groups. The program prints the number of groups, followed by the size of the largest group. What exact output is printed?",
+    traceCode: "words = [\"ant\", \"tan\", \"bat\", \"tab\", \"eat\"]\ngroups = {}\n\nfor word in words:\n    key = \"\".join(sorted(word))\n    groups.setdefault(key, []).append(word)\n\nprint(len(groups), max(len(group) for group in groups.values()))",
     inputFormat: "First line contains N.\nSecond line contains N integers.",
     outputFormat: "Print the sorted array elements separated by space.",
     sampleInput: "5\n5 1 4 2 8",
@@ -421,81 +424,20 @@ export const round3Problems: Round3Problem[] = [
 
 export const round4Problems: Round4Problem[] = [
   {
-    problemId: "r4-p1",
-    title: "Maximum Sum Window",
+    problemId: "r4-longest-unique-window",
+    title: "Longest Unique-Character Segment",
     difficulty: "Medium",
-    description: "Given an integer array and a window size K, find the maximum sum among all consecutive windows of exactly K elements. Use a sliding-window update so the solution runs in O(N).\n\nSample Input:\n6 3\n2 1 5 1 3 2\n\nExpected Output:\n9",
-    inputFormat: "First line contains N and K. Second line contains N integers.",
-    outputFormat: "Print the maximum sum of any K consecutive elements.",
-    sampleInput: "6 3\n2 1 5 1 3 2",
-    sampleOutput: "9",
-    targetOutputNumber: 9,
-    points: 5,
-    starterCode: {
-      python: "n, k = map(int, input().split())\nnums = list(map(int, input().split()))[:n]\nwindow_sum = sum(nums[:k])\nbest = window_sum\nfor i in range(k, n):\n    # FIX ME: slide the window in O(1)\n    # FIX ME: update the best sum\nprint(best)"
-    },
-    visibleTestCases: [
-      { id: "r4-p1-tc1", input: "6 3\n2 1 5 1 3 2", expectedOutput: "9" },
-      { id: "r4-p1-tc2", input: "5 2\n1 4 2 10 2", expectedOutput: "12" },
-      { id: "r4-p1-tc3", input: "5 3\n-1 -2 -3 -4 -5", expectedOutput: "-6" },
-      { id: "r4-p1-tc4", input: "4 1\n7 -2 5 1", expectedOutput: "7" },
-      { id: "r4-p1-tc5", input: "4 4\n1 2 3 4", expectedOutput: "10" }
-    ],
-    hiddenTestCases: []
-  },
-  {
-    problemId: "r4-p2",
-    title: "First Non-Repeating Character",
-    difficulty: "Easy",
-    description: "Given a lowercase string, find the zero-based index of the first character that occurs exactly once. Return -1 if every character repeats. Count characters first, then scan in original order.\n\nSample Input:\naabbcde\n\nExpected Output:\n4",
-    inputFormat: "A single lowercase string.",
-    outputFormat: "Print the zero-based index, or -1 if no unique character exists.",
-    sampleInput: "aabbcde",
-    sampleOutput: "4",
-    targetOutputNumber: 4,
-    points: 5,
-    starterCode: {
-      python: "text = input().strip()\ncounts = {}\nfor char in text:\n    # FIX ME: count this character\n    pass\nfor index, char in enumerate(text):\n    if counts[char] == 1:\n        print(index)\n        break\nelse:\n    print(-1)"
-    },
-    visibleTestCases: [
-      { id: "r4-p2-tc1", input: "aabbcde", expectedOutput: "4" },
-      { id: "r4-p2-tc2", input: "leetcode", expectedOutput: "0" },
-      { id: "r4-p2-tc3", input: "aabb", expectedOutput: "-1" },
-      { id: "r4-p2-tc4", input: "loveleetcode", expectedOutput: "2" },
-      { id: "r4-p2-tc5", input: "z", expectedOutput: "0" }
-    ],
-    hiddenTestCases: []
-  },
-  {
-    problemId: "r4-p3",
-    title: "Range Sum Queries",
-    difficulty: "Medium",
-    description: "Given an integer array and one inclusive zero-based range [L, R], return the sum of the values in that range. Build prefix sums so each query is answered in O(1).\n\nSample Input:\n3\n7 11 22\n0 2\n\nExpected Output:\n40",
-    inputFormat: "First line contains N. Second line contains N integers. Third line contains L and R.",
-    outputFormat: "Print the inclusive range sum from index L through index R.",
-    sampleInput: "3\n7 11 22\n0 2",
-    sampleOutput: "40",
-    targetOutputNumber: 40,
-    points: 5,
-    starterCode: {
-      python: "n = int(input())\nnums = list(map(int, input().split()))[:n]\nprefix = [0] * (n + 1)\nfor i in range(1, n + 1):\n    # FIX ME: build the prefix sum\n    pass\nleft, right = map(int, input().split())\n# FIX ME: answer the inclusive range query\nprint(0)"
-    },
-    visibleTestCases: [
-      { id: "r4-p3-tc1", input: "3\n7 11 22\n0 2", expectedOutput: "40" },
-      { id: "r4-p3-tc2", input: "4\n5 1 2 9\n0 2", expectedOutput: "8" },
-      { id: "r4-p3-tc3", input: "3\n-2 4 6\n0 1", expectedOutput: "2" },
-      { id: "r4-p3-tc4", input: "1\n7\n0 0", expectedOutput: "7" },
-      { id: "r4-p3-tc5", input: "5\n1 2 3 4 5\n2 4", expectedOutput: "12" }
-    ],
-    hiddenTestCases: []
+    description: "Given a string, determine the length of its longest contiguous substring containing no repeated characters. Describe your algorithm in plain English; do not write code. Explain how you move through the string, how you handle a repeated character inside the current substring, and how you track the best length.",
+    answerPrompt: "In 3–6 sentences, explain a linear-time sliding-window algorithm. State what information you track, how the left edge changes when a repeated character appears, and when you update the maximum length.",
+    points: 15
   }
 ];
 
 export const round4Config: Round4Config = {
   transformationRuleText: "FINAL CODE = (PROGRAM 1 OUTPUT × 10) + PROGRAM 2 OUTPUT + PROGRAM 3 OUTPUT",
   transformationRuleType: "linear_formula",
-  expectedIntermediateCode: "9 | 4 | 40",
-  expectedFinalKey: "134"
+  expectedIntermediateCode: "",
+  expectedFinalKey: ""
 };
 
 export const initialParticipants: Participant[] = [

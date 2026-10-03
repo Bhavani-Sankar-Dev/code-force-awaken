@@ -10,10 +10,44 @@ import {
   round1AnswerKeys,
   round2AnswerKeys,
   round3AnswerKeys,
-  round4CodeAnswerKeys,
+  round4AnswerRubrics,
 } from "./answerKeys.ts";
 import { round1Questions } from "../src/data/competitionData.ts";
 import type { Participant } from "../src/types.ts";
+import { resolveFrontendOrigins } from "./frontendOrigins.ts";
+
+test("production Netlify site URL supplies the same-origin CORS allowlist", () => {
+  const origins = resolveFrontendOrigins(
+    undefined,
+    "https://aikya-code-force-awaken.netlify.app/",
+    true,
+  );
+
+  assert.deepEqual([...origins], ["https://aikya-code-force-awaken.netlify.app"]);
+});
+
+test("production frontend origin configuration retains additional allowed origins", () => {
+  const origins = resolveFrontendOrigins(
+    "https://aikya-code-force-awaken.netlify.app, https://preview.example.net",
+    "https://aikya-code-force-awaken.netlify.app",
+    true,
+  );
+
+  assert.deepEqual(
+    [...origins],
+    [
+      "https://aikya-code-force-awaken.netlify.app",
+      "https://preview.example.net",
+    ],
+  );
+});
+
+test("production origin resolution fails closed without a configured or Netlify URL", () => {
+  assert.throws(
+    () => resolveFrontendOrigins(undefined, undefined, true),
+    /FRONTEND_ORIGINS or Netlify's URL/,
+  );
+});
 
 async function availablePort(): Promise<number> {
   const server = net.createServer();
@@ -371,6 +405,13 @@ test(
       assert.equal(repeatedRound1.status, 409);
 
       await startRound(2);
+      const round2Challenge = await jsonRequest<{
+        problems: Array<{ problemId: string; traceCode: string }>;
+      }>(`${baseUrl}/api/round2/problems`, { headers: authHeaders });
+      assert.equal(round2Challenge.response.status, 200);
+      assert.equal(round2Challenge.data.problems.length, 3);
+      assert.ok(round2Challenge.data.problems.every(problem => problem.traceCode.length > 0));
+      assert.ok(round2Challenge.data.problems.every(problem => !("sampleOutput" in problem)));
       const round2 = await jsonRequest<{
         score: number;
         isQualified: boolean;
@@ -414,66 +455,44 @@ test(
       assert.equal(round3.data.participant.currentRound, 4);
 
       await startRound(4);
-      const round4Entries = Object.entries(round4CodeAnswerKeys);
-      for (const [problemId, problem] of round4Entries.slice(0, 2)) {
-        const verified = await jsonRequest<{ success: boolean; allProblemsSolved: boolean }>(
-          `${baseUrl}/api/round4/verify-problem`,
-          {
-            method: "POST",
-            headers: authHeaders,
-            body: JSON.stringify({
-              problemId,
-              answers: Object.fromEntries(
-                problem.prompts.map((prompt) => [prompt.id, prompt.accepted[0]]),
-              ),
-            }),
-          },
-        );
-        assert.equal(
-          verified.data.success,
-          true,
-          `Round 4 verification failed (${verified.response.status}): ${JSON.stringify(verified.data)}`,
-        );
-        assert.equal(verified.data.allProblemsSolved, false);
-      }
-      const prematureFinal = await jsonRequest<{ error: string }>(
-        `${baseUrl}/api/round4/submit-final-code`,
+      const round4Challenge = await jsonRequest<{
+        problems: Array<{ problemId: string; answerPrompt: string }>;
+      }>(`${baseUrl}/api/round4/challenge`, { headers: authHeaders });
+      assert.equal(round4Challenge.response.status, 200);
+      assert.equal(round4Challenge.data.problems.length, 1);
+      assert.ok(round4Challenge.data.problems[0].answerPrompt);
+      assert.equal("rubric" in round4Challenge.data.problems[0], false);
+      const [problemId] = Object.keys(round4AnswerRubrics);
+      const incompleteAnswer = await jsonRequest<{ success: boolean }>(
+        `${baseUrl}/api/round4/verify-problem`,
         {
           method: "POST",
           headers: authHeaders,
-          body: JSON.stringify({ enteredFinalCode: "134" }),
+          body: JSON.stringify({ problemId, answer: "I look for repeated characters with a window." }),
         },
       );
-      assert.equal(prematureFinal.response.status, 403);
+      assert.equal(incompleteAnswer.response.status, 200);
+      assert.equal(incompleteAnswer.data.success, false);
 
-      const [lastProblemId, lastProblem] = round4Entries[2];
       const lastVerified = await jsonRequest<{
         success: boolean;
         allProblemsSolved: boolean;
+        marksEarned: number;
+        participant: Participant;
       }>(`${baseUrl}/api/round4/verify-problem`, {
         method: "POST",
         headers: authHeaders,
         body: JSON.stringify({
-          problemId: lastProblemId,
-          answers: Object.fromEntries(
-            lastProblem.prompts.map((prompt) => [prompt.id, prompt.accepted[0]]),
-          ),
+          problemId,
+          answer: "Use a sliding window with left and right pointers. Keep a dictionary of each character's last seen index. If a repeated character is inside the window, move the left boundary to one after its prior index. Update the maximum length on each step. Each character is processed once, so this is O(n) linear time.",
         }),
       });
+      assert.equal(lastVerified.response.status, 200);
       assert.equal(lastVerified.data.success, true);
       assert.equal(lastVerified.data.allProblemsSolved, true);
-
-      const finalRound = await jsonRequest<{
-        success: boolean;
-        participant: Participant;
-      }>(`${baseUrl}/api/round4/submit-final-code`, {
-        method: "POST",
-        headers: authHeaders,
-        body: JSON.stringify({ enteredFinalCode: "134" }),
-      });
-      assert.equal(finalRound.response.status, 200);
-      assert.equal(finalRound.data.success, true);
-      assert.equal(finalRound.data.participant.currentRound, 5);
+      assert.equal(lastVerified.data.marksEarned, 15);
+      assert.equal(lastVerified.data.participant.currentRound, 5);
+      assert.equal(lastVerified.data.participant.round4Score, 15);
 
       const forbiddenAdmin = await fetch(`${baseUrl}/api/admin/data`);
       assert.equal(forbiddenAdmin.status, 401);

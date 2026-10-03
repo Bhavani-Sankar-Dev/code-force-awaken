@@ -13,9 +13,9 @@ export const round1AnswerKeys: Record<string, { mode: AnswerMode; accepted: read
 };
 
 export const round2AnswerKeys: Record<string, readonly string[]> = {
-  'r2-p1': ['EVEN'],
-  'r2-p2': ['4'],
-  'r2-p3': ['1 2 4 5 8']
+  'r2-p1': ['7'],
+  'r2-p2': ['7'],
+  'r2-p3': ['3 2']
 };
 
 export const round3AnswerKeys: Record<string, {
@@ -26,12 +26,17 @@ export const round3AnswerKeys: Record<string, {
       {
         id: 'complement',
         prompt: 'Calculate the value needed to complete the target sum.',
-        accepted: ['target - value']
+        accepted: ['target - value', 'target - nums[index]', '(target - value)']
       },
       {
         id: 'store-index',
         prompt: 'Store the current value and index for a later match.',
-        accepted: ['seen[value] = index']
+        accepted: [
+          'seen[value] = index',
+          'seen[nums[index]] = index',
+          'seen.setdefault(value, index)',
+          'seen.update({value: index})'
+        ]
       }
     ]
   },
@@ -42,57 +47,24 @@ export const round3AnswerKeys: Record<string, {
         prompt: 'Increase the frequency count for this character.',
         accepted: [
           'counts[char] = counts.get(char, 0) + 1',
-          'counts[char] = 1 if char not in counts else counts[char] + 1'
+          'counts[char] = 1 if char not in counts else counts[char] + 1',
+          'counts[char] = counts[char] + 1 if char in counts else 1'
         ]
       }
     ]
   }
 };
 
-export const round4AnswerKeys: Record<string, readonly string[]> = {
-  'r4-p1': ['9'],
-  'r4-p2': ['4'],
-  'r4-p3': ['40']
-};
-
-export const round4CodeAnswerKeys: Record<string, {
-  prompts: Array<{ id: string; prompt: string; accepted: readonly string[] }>;
-}> = {
-  'r4-p1': {
-    prompts: [
-      {
-        id: 'slide-window',
-        prompt: 'Update the running sum when the window moves one position right.',
-        accepted: ['window_sum += nums[i] - nums[i - k]']
-      },
-      {
-        id: 'update-best',
-        prompt: 'Keep the maximum window sum seen so far.',
-        accepted: ['best = max(best, window_sum)']
-      }
-    ]
-  },
-  'r4-p2': {
-    prompts: [
-      {
-        id: 'count-character',
-        prompt: 'Count each character before searching for the first unique one.',
-        accepted: ['counts[char] = counts.get(char, 0) + 1']
-      }
-    ]
-  },
-  'r4-p3': {
-    prompts: [
-      {
-        id: 'build-prefix',
-        prompt: 'Extend the prefix sum through the current value.',
-        accepted: ['prefix[i] = prefix[i - 1] + nums[i - 1]']
-      },
-      {
-        id: 'range-query',
-        prompt: 'Compute the inclusive range sum from left through right.',
-        accepted: ['prefix[right + 1] - prefix[left]']
-      }
-    ]
-  }
+export const round4AnswerRubrics: Record<
+  string,
+  readonly (readonly string[])[]
+> = {
+  "r4-longest-unique-window": [
+    ["sliding window", "two pointer", "two-pointer"],
+    ["set", "last seen", "last-seen", "last occurrence", "index map", "dictionary"],
+    ["left pointer", "left boundary", "left edge", "start boundary"],
+    ["duplicate", "repeated character", "same character", "seen before"],
+    ["maximum length", "longest length", "best length", "max length"],
+    ["o(n)", "linear time", "linear"],
+  ],
 };

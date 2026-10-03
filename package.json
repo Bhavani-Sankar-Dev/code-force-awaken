@@ -8,7 +8,7 @@
     "build": "vite build",
     "start": "tsx server/localServer.ts",
     "migrate:state": "tsx scripts/migrate-state.ts",
-    "test": "node --import tsx --test server/postgresState.test.ts server/api.integration.test.ts",
+    "test": "node --import tsx --test server/postgresState.test.ts server/answerChecking.test.ts server/api.integration.test.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"

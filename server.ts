@@ -17,15 +17,18 @@ import {
   initialParticipants,
 } from "./src/data/competitionData.ts";
 import type { Participant, Slot, EventConfig } from "./src/types.ts";
-import { isAcceptedAnswer } from "./server/answerChecking.ts";
+import {
+  isAcceptedAnswer,
+  matchesAnswerRubric,
+} from "./server/answerChecking.ts";
 import {
   round1AnswerKeys,
   round2AnswerKeys,
   round3AnswerKeys,
-  round4AnswerKeys,
-  round4CodeAnswerKeys,
+  round4AnswerRubrics,
 } from "./server/answerKeys.ts";
 import { registrationKey } from "./server/registrationIdentity.ts";
+import { resolveFrontendOrigins } from "./server/frontendOrigins.ts";
 import {
   ensurePostgresStateSchema,
   loadPostgresState,
@@ -75,26 +78,11 @@ type PostgresRequest = { dirty: boolean };
 const postgresRequestStorage = new AsyncLocalStorage<PostgresRequest>();
 let postgresPool: Pool | undefined;
 let postgresSchemaReady: Promise<void> | undefined;
-const configuredFrontendOrigins = (process.env.FRONTEND_ORIGINS || "")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
-const frontendOrigins = new Set(
-  isProduction
-    ? configuredFrontendOrigins
-    : [
-        ...configuredFrontendOrigins,
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-      ],
+const frontendOrigins = resolveFrontendOrigins(
+  process.env.FRONTEND_ORIGINS,
+  process.env.URL,
+  isProduction,
 );
-if (isProduction && frontendOrigins.size === 0) {
-  throw new Error(
-    "Production requires FRONTEND_ORIGINS with the exact HTTPS frontend origin.",
-  );
-}
 
 let slots: Slot[] = [...initialSlots];
 let eventConfig: EventConfig = { ...initialEventConfig };
@@ -132,6 +120,7 @@ let round4Sessions: Record<
     p1Verified: boolean;
     p2Verified: boolean;
     p3Verified: boolean;
+    algorithmAnswerAccepted?: boolean;
   }
 > = {
   "TEST-001": { p1Verified: false, p2Verified: false, p3Verified: false },
@@ -1115,9 +1104,7 @@ app.get("/api/round2/problems", (req: Request, res: Response) => {
     title: problem.title,
     difficulty: problem.difficulty,
     description: problem.description,
-    inputFormat: problem.inputFormat,
-    outputFormat: problem.outputFormat,
-    sampleInput: problem.sampleInput,
+    traceCode: problem.traceCode,
     points: problem.points,
     timeLimitMinutes: problem.timeLimitMinutes,
   }));
@@ -1342,17 +1329,10 @@ app.get("/api/round4/challenge", (req: Request, res: Response) => {
       problemId: problem.problemId,
       title: problem.title,
       difficulty: problem.difficulty,
-      description: problem.description.replace(/\n\nExpected Output:\n[^\n]+/g, ''),
-      inputFormat: problem.inputFormat,
-      outputFormat: problem.outputFormat,
-      sampleInput: problem.sampleInput,
+      description: problem.description,
+      answerPrompt: problem.answerPrompt,
       points: problem.points,
-      starterCode: problem.starterCode.python,
-      codePrompts: round4CodeAnswerKeys[problem.problemId]?.prompts.map(
-        ({ id, prompt }) => ({ id, prompt }),
-      ) ?? [],
     })),
-    transformationRuleText: null,
   });
 });
 
@@ -1362,33 +1342,12 @@ app.get("/api/round4/session/:participantId", (req: Request, res: Response) => {
   if (!cadet) return;
   if (cadet.participantId !== req.params.participantId)
     return res.status(403).json({ error: "Participant access denied." });
-  const sess = round4Sessions[req.params.participantId] || {
-    p1Verified: false,
-    p2Verified: false,
-    p3Verified: false,
-  };
-  const solvedCount = [
-    sess.p1Verified,
-    sess.p2Verified,
-    sess.p3Verified,
-  ].filter(Boolean).length;
-  const enoughProblemsSolved = solvedCount === round4Problems.length;
-
+  const sess = round4Sessions[req.params.participantId];
+  const answerAccepted = sess?.algorithmAnswerAccepted === true;
   res.json({
-    p1Verified: sess.p1Verified,
-    p1Output: sess.p1Verified ? Number(round4AnswerKeys['r4-p1'][0]) : null,
-    p1Marks: sess.p1Verified ? 5 : 0,
-    p2Verified: sess.p2Verified,
-    p2Output: sess.p2Verified ? Number(round4AnswerKeys['r4-p2'][0]) : null,
-    p2Marks: sess.p2Verified ? 5 : 0,
-    p3Verified: sess.p3Verified,
-    p3Output: sess.p3Verified ? Number(round4AnswerKeys['r4-p3'][0]) : null,
-    p3Marks: sess.p3Verified ? 5 : 0,
-    allProblemsSolved: enoughProblemsSolved,
-    solvedCount,
-    transformationRule: enoughProblemsSolved
-      ? r4Config.transformationRuleText
-      : null,
+    answerAccepted,
+    allProblemsSolved: answerAccepted,
+    solvedCount: Number(answerAccepted),
   });
 });
 
@@ -1400,34 +1359,30 @@ app.post("/api/round4/verify-problem", (req: Request, res: Response) => {
     return res.status(403).json({ error: "Qualify in Round 3 first." });
   if (cadet.round4Status === "completed")
     return res.status(409).json({ error: "Round 4 has already been completed." });
-  const { problemId, answers } = req.body ?? {};
+  const { problemId, answer } = req.body ?? {};
   const problem = round4Problems.find((p) => p.problemId === problemId);
   if (!problem) return res.status(404).json({ error: "Problem not found" });
-
-  if (!answers || typeof answers !== "object" || Array.isArray(answers)) {
-    return res.status(400).json({ error: "Code fragment answers are required." });
+  if (typeof answer !== "string" || answer.trim().length === 0) {
+    return res.status(400).json({ error: "A plain-English algorithm explanation is required." });
   }
-  const codePrompts = round4CodeAnswerKeys[problem.problemId]?.prompts ?? [];
-  if (codePrompts.some(({ id }) =>
-    typeof (answers as Record<string, unknown>)[id] !== "string" ||
-    ((answers as Record<string, string>)[id]?.length ?? 0) > 500
-  )) {
-    return res.status(400).json({ error: "Provide each requested code fragment (maximum 500 characters)." });
+  if (answer.length > 2000) {
+    return res.status(400).json({ error: "The explanation must be 2000 characters or fewer." });
   }
   const timer = attempts[cadet.participantId]?.rounds[4];
   if (!timer) {
     return res
       .status(409)
-      .json({ error: "Start Round 4 before verifying programs." });
+      .json({ error: "Start Round 4 before submitting an answer." });
   }
   if (isAttemptPastDeadline(cadet, 4, SUBMISSION_NETWORK_GRACE_MS)) {
     return res.status(409).json({ error: "Round 4 time has expired." });
   }
-  const allFragmentsCorrect = codePrompts.length > 0 && codePrompts.every(({ id, accepted }) =>
-    isAcceptedAnswer((answers as Record<string, unknown>)[id], accepted, 'code-fragment')
-  );
-  if (!allFragmentsCorrect) {
-    return res.json({ success: false, message: "One or more Python logic fragments are not correct." });
+  const rubric = round4AnswerRubrics[problem.problemId];
+  if (!rubric || !matchesAnswerRubric(answer, rubric)) {
+    return res.json({
+      success: false,
+      message: "Include the sliding-window approach, how you track previously seen characters and move the left boundary, how you update the maximum length, and the expected linear-time complexity.",
+    });
   }
 
   if (!round4Sessions[cadet.participantId]) {
@@ -1438,26 +1393,27 @@ app.post("/api/round4/verify-problem", (req: Request, res: Response) => {
     };
   }
   const sess = round4Sessions[cadet.participantId];
-
-  if (problemId === "r4-p1") sess.p1Verified = true;
-  if (problemId === "r4-p2") sess.p2Verified = true;
-  if (problemId === "r4-p3") sess.p3Verified = true;
-
-  const solvedCount = [
-    sess.p1Verified,
-    sess.p2Verified,
-    sess.p3Verified,
-  ].filter(Boolean).length;
-  const enoughSolved = solvedCount === round4Problems.length;
+  const timeTakenSeconds = secondsTaken(cadet, 4);
+  if (timeTakenSeconds === undefined) {
+    return res.status(409).json({ error: "Start Round 4 before submitting an answer." });
+  }
+  sess.algorithmAnswerAccepted = true;
+  cadet.round4Status = "completed";
+  attempts[cadet.participantId].rounds[4]!.status = "completed";
+  cadet.round4Score = problem.points;
+  cadet.round4SolvedKey = "ALGORITHM_ANSWER_ACCEPTED";
+  cadet.round4TimeSeconds = timeTakenSeconds;
+  cadet.status = "completed";
+  cadet.currentRound = 5;
+  cadet.totalScore = cadet.round1Score + cadet.round2Score + cadet.round3Score + cadet.round4Score;
+  cadet.totalTimeSeconds = cadet.round1TimeSeconds + cadet.round2TimeSeconds + cadet.round3TimeSeconds + cadet.round4TimeSeconds;
   saveDB();
-
   res.json({
     success: true,
-    verifiedOutput: Number(round4AnswerKeys[problem.problemId][0]),
-    marksEarned: 5,
-    allProblemsSolved: enoughSolved,
-    solvedCount,
-    transformationRule: enoughSolved ? r4Config.transformationRuleText : null,
+    allProblemsSolved: true,
+    solvedCount: 1,
+    marksEarned: problem.points,
+    participant: cadet,
   });
 });
 
@@ -1465,75 +1421,7 @@ app.post("/api/round4/verify-problem", (req: Request, res: Response) => {
 app.post("/api/round4/submit-final-code", (req: Request, res: Response) => {
   const cadet = getParticipant(req, res);
   if (!cadet) return;
-  const sess = round4Sessions[cadet.participantId];
-  if (
-    !sess ||
-    [sess.p1Verified, sess.p2Verified, sess.p3Verified].filter(Boolean).length <
-      round4Problems.length
-  ) {
-    return res
-      .status(403)
-      .json({
-        error:
-          "Complete all three Round 4 code-fragment questions before submitting the final code.",
-      });
-  }
-  if (cadet.round4Status === "completed")
-    return res
-      .status(409)
-      .json({ error: "Round 4 has already been completed." });
-  const { enteredFinalCode } = req.body ?? {};
-  if (typeof enteredFinalCode !== "string")
-    return res.status(400).json({ error: "Final code is required." });
-  const timeTakenSeconds = secondsTaken(cadet, 4);
-  if (timeTakenSeconds === undefined)
-    return res.status(409).json({ error: "Start Round 4 before submitting." });
-  if (isAttemptPastDeadline(cadet, 4, SUBMISSION_NETWORK_GRACE_MS)) {
-    return res
-      .status(409)
-      .json({ error: "Round 4 time expired before your final code arrived." });
-  }
-
-  const isCorrect =
-    isAcceptedAnswer(enteredFinalCode, [r4Config.expectedFinalKey], 'output');
-
-  if (isCorrect) {
-    cadet.round4Status = "completed";
-    attempts[cadet.participantId].rounds[4]!.status = "completed";
-    cadet.round4Score =
-      [sess.p1Verified, sess.p2Verified, sess.p3Verified].filter(Boolean)
-        .length * 5;
-    cadet.round4SolvedKey = enteredFinalCode.trim();
-    cadet.round4TimeSeconds = timeTakenSeconds;
-    cadet.status = "completed";
-    cadet.currentRound = 5;
-    cadet.totalScore =
-      cadet.round1Score +
-      cadet.round2Score +
-      cadet.round3Score +
-      cadet.round4Score;
-    cadet.totalTimeSeconds =
-      cadet.round1TimeSeconds +
-      cadet.round2TimeSeconds +
-      cadet.round3TimeSeconds +
-      cadet.round4TimeSeconds;
-
-    saveDB();
-    res.json({
-      success: true,
-      isCorrect: true,
-      score: cadet.round4Score,
-      message: "IMPERIAL VICTORY MANIFEST ARCHIVED! Final Master Key Verified.",
-      participant: cadet,
-    });
-  } else {
-    res.status(400).json({
-      success: false,
-      isCorrect: false,
-      message:
-        "Invalid Final Key. Verify Program 1, 2, and 3 outputs and apply the Transformation Matrix formula.",
-    });
-  }
+  res.status(410).json({ error: "Round 4 now accepts one plain-English algorithm explanation." });
 });
 
 app.post("/api/round4/force-submit", (req: Request, res: Response) => {
@@ -1554,14 +1442,9 @@ app.post("/api/round4/force-submit", (req: Request, res: Response) => {
   }
 
   const session = round4Sessions[cadet.participantId];
-  const verifiedCount = session
-    ? [session.p1Verified, session.p2Verified, session.p3Verified].filter(
-        Boolean,
-      ).length
-    : 0;
   cadet.round4Status = "completed";
   attempts[cadet.participantId].rounds[4]!.status = "completed";
-  cadet.round4Score = verifiedCount * 5;
+  cadet.round4Score = session?.algorithmAnswerAccepted ? round4Problems[0].points : 0;
   cadet.round4TimeSeconds = timerSeconds;
   cadet.status = "completed";
   cadet.currentRound = 5;

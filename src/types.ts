@@ -140,6 +140,7 @@ export interface Round2Problem {
   title: string;
   difficulty: 'Easy' | 'Medium' | 'Hard';
   description: string;
+  traceCode: string;
   inputFormat: string;
   outputFormat: string;
   sampleInput: string;
@@ -153,9 +154,11 @@ export interface Round2Problem {
 
 export type Round2Question = Pick<
   Round2Problem,
-  'problemId' | 'title' | 'difficulty' | 'description' | 'inputFormat' |
-  'outputFormat' | 'sampleInput' | 'points' | 'timeLimitMinutes'
->;
+  'problemId' | 'title' | 'difficulty' | 'description' |
+  'points' | 'timeLimitMinutes'
+> & {
+  traceCode: string;
+};
 
 export interface Round3Problem {
   problemId: string;
@@ -188,26 +191,15 @@ export interface Round4Problem {
   title: string;
   difficulty: 'Easy' | 'Medium' | 'Hard';
   description: string;
-  inputFormat: string;
-  outputFormat: string;
-  sampleInput: string;
-  sampleOutput: string;
-  targetOutputNumber: number;
+  answerPrompt: string;
   points: number;
-  starterCode: StarterCode;
-  visibleTestCases: TestCase[];
-  hiddenTestCases: TestCase[];
 }
 
 export type Round4Question = Pick<
   Round4Problem,
-  'problemId' | 'title' | 'difficulty' | 'inputFormat' | 'outputFormat' |
-  'sampleInput' | 'points'
-> & {
-  description: string;
-  starterCode: string;
-  codePrompts: Round3BlankPrompt[];
-};
+  'problemId' | 'title' | 'difficulty' | 'description' |
+  'answerPrompt' | 'points'
+>;
 
 export interface StarterCode {
   python: string;
