@@ -23,6 +23,7 @@ import {
   round2AnswerKeys,
   round3AnswerKeys,
   round4AnswerKeys,
+  round4CodeAnswerKeys,
 } from "./server/answerKeys.ts";
 import { registrationKey } from "./server/registrationIdentity.ts";
 import {
@@ -1221,6 +1222,7 @@ app.get("/api/round3/problems", (req: Request, res: Response) => {
     difficulty: problem.difficulty,
     description: problem.description,
     points: problem.points,
+    starterCode: problem.starterCode.python,
     blanks: round3AnswerKeys[problem.problemId]?.blanks.map(({ id, prompt }) => ({ id, prompt })) ?? [],
   }));
   res.json({
@@ -1345,6 +1347,10 @@ app.get("/api/round4/challenge", (req: Request, res: Response) => {
       outputFormat: problem.outputFormat,
       sampleInput: problem.sampleInput,
       points: problem.points,
+      starterCode: problem.starterCode.python,
+      codePrompts: round4CodeAnswerKeys[problem.problemId]?.prompts.map(
+        ({ id, prompt }) => ({ id, prompt }),
+      ) ?? [],
     })),
     transformationRuleText: null,
   });
@@ -1366,7 +1372,7 @@ app.get("/api/round4/session/:participantId", (req: Request, res: Response) => {
     sess.p2Verified,
     sess.p3Verified,
   ].filter(Boolean).length;
-  const enoughProblemsSolved = solvedCount >= 2;
+  const enoughProblemsSolved = solvedCount === round4Problems.length;
 
   res.json({
     p1Verified: sess.p1Verified,
@@ -1394,12 +1400,19 @@ app.post("/api/round4/verify-problem", (req: Request, res: Response) => {
     return res.status(403).json({ error: "Qualify in Round 3 first." });
   if (cadet.round4Status === "completed")
     return res.status(409).json({ error: "Round 4 has already been completed." });
-  const { problemId, answer } = req.body ?? {};
+  const { problemId, answers } = req.body ?? {};
   const problem = round4Problems.find((p) => p.problemId === problemId);
   if (!problem) return res.status(404).json({ error: "Problem not found" });
 
-  if (typeof answer !== "string" || answer.length > 2000) {
-    return res.status(400).json({ error: "Provide an answer no longer than 2,000 characters." });
+  if (!answers || typeof answers !== "object" || Array.isArray(answers)) {
+    return res.status(400).json({ error: "Code fragment answers are required." });
+  }
+  const codePrompts = round4CodeAnswerKeys[problem.problemId]?.prompts ?? [];
+  if (codePrompts.some(({ id }) =>
+    typeof (answers as Record<string, unknown>)[id] !== "string" ||
+    ((answers as Record<string, string>)[id]?.length ?? 0) > 500
+  )) {
+    return res.status(400).json({ error: "Provide each requested code fragment (maximum 500 characters)." });
   }
   const timer = attempts[cadet.participantId]?.rounds[4];
   if (!timer) {
@@ -1410,8 +1423,11 @@ app.post("/api/round4/verify-problem", (req: Request, res: Response) => {
   if (isAttemptPastDeadline(cadet, 4, SUBMISSION_NETWORK_GRACE_MS)) {
     return res.status(409).json({ error: "Round 4 time has expired." });
   }
-  if (!isAcceptedAnswer(answer, round4AnswerKeys[problem.problemId] ?? [], 'output')) {
-    return res.json({ success: false, message: "That output is not correct for the provided input." });
+  const allFragmentsCorrect = codePrompts.length > 0 && codePrompts.every(({ id, accepted }) =>
+    isAcceptedAnswer((answers as Record<string, unknown>)[id], accepted, 'code-fragment')
+  );
+  if (!allFragmentsCorrect) {
+    return res.json({ success: false, message: "One or more Python logic fragments are not correct." });
   }
 
   if (!round4Sessions[cadet.participantId]) {
@@ -1432,7 +1448,7 @@ app.post("/api/round4/verify-problem", (req: Request, res: Response) => {
     sess.p2Verified,
     sess.p3Verified,
   ].filter(Boolean).length;
-  const enoughSolved = solvedCount >= 2;
+  const enoughSolved = solvedCount === round4Problems.length;
   saveDB();
 
   res.json({
@@ -1453,13 +1469,13 @@ app.post("/api/round4/submit-final-code", (req: Request, res: Response) => {
   if (
     !sess ||
     [sess.p1Verified, sess.p2Verified, sess.p3Verified].filter(Boolean).length <
-      2
+      round4Problems.length
   ) {
     return res
       .status(403)
       .json({
         error:
-          "Solve at least two Round 4 programs before submitting the final code.",
+          "Complete all three Round 4 code-fragment questions before submitting the final code.",
       });
   }
   if (cadet.round4Status === "completed")

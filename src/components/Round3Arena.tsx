@@ -259,7 +259,7 @@ export const Round3Arena: React.FC<Round3ArenaProps> = ({
               ROUND 3: THE HIDDEN FORCE
             </div>
             <div className="text-[11px] font-mono text-slate-400">
-              Code Fragment Completion • Problem {activeProblemIndex + 1} of {problems.length}
+              Python Logic Fragments • Problem {activeProblemIndex + 1} of {problems.length}
             </div>
           </div>
         </div>
@@ -330,13 +330,22 @@ export const Round3Arena: React.FC<Round3ArenaProps> = ({
                   </div>
                 </div>
 
+                <div className="space-y-2">
+                  <div className="text-[11px] font-mono uppercase text-slate-400">
+                    Python starter code (fix the fragments below)
+                  </div>
+                  <pre className="max-h-80 overflow-auto whitespace-pre rounded-xl border border-slate-800 bg-[#060b19] p-3 text-xs leading-relaxed text-cyan-200">
+                    {currentProblem.starterCode}
+                  </pre>
+                </div>
+
                 <div className="p-3.5 rounded-xl bg-purple-950/40 border border-purple-500/40 space-y-1">
                   <div className="text-xs font-mono font-bold text-purple-300 flex items-center gap-1.5">
                     <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
                     ANSWER FORMAT:
                   </div>
                   <div className="text-xs text-slate-300 font-sans">
-                    Fill each requested code fragment. Your fragments are checked against the accepted answers shown by the organizer; Python is not executed.
+                    Fill each requested fragment. The server compares fragments with predefined accepted expressions; it does not execute Python.
                   </div>
                 </div>
               </div>
@@ -353,7 +362,7 @@ export const Round3Arena: React.FC<Round3ArenaProps> = ({
                 {currentProblem.blanks.map((blank, index) => (
                   <label key={blank.id} className="block space-y-2">
                     <span className="block text-xs font-mono text-slate-300">{index + 1}. {blank.prompt}</span>
-                    <input
+                    <textarea
                       value={answers[currentProblem.problemId]?.[blank.id] || ''}
                       onChange={event => setAnswers(previous => ({
                         ...previous,
@@ -364,8 +373,9 @@ export const Round3Arena: React.FC<Round3ArenaProps> = ({
                       }))}
                       disabled={participant.round3Status === 'completed' || submitting}
                       maxLength={500}
-                      className="w-full rounded-lg border border-slate-700 bg-[#060b19] px-4 py-3 font-mono text-sm text-purple-200 outline-none focus:border-purple-400 disabled:opacity-60"
-                      placeholder="Enter a Python code fragment"
+                      rows={2}
+                      className="w-full resize-y rounded-lg border border-slate-700 bg-[#060b19] px-4 py-3 font-mono text-sm text-purple-200 outline-none focus:border-purple-400 disabled:opacity-60"
+                      placeholder="Enter the Python code fragment"
                     />
                   </label>
                 ))}

@@ -363,7 +363,7 @@ export const Round2Arena: React.FC<Round2ArenaProps> = ({
                   <div className="text-slate-500 uppercase">Sample Input:</div>
                   <pre className="text-cyan-300 bg-black/40 p-2 rounded">{currentProblem.sampleInput}</pre>
                 </div>
-                <p className="text-[11px] text-amber-200/80 font-mono">Write the exact expected output for this input. Submitted programs are not executed in this round.</p>
+                <p className="text-[11px] text-amber-200/80 font-mono">Enter the expected output for the sample input—not Python source code. This round does not execute submitted programs.</p>
               </div>
             </div>
           </div>
@@ -373,23 +373,24 @@ export const Round2Arena: React.FC<Round2ArenaProps> = ({
             <div className="cyber-card p-5 rounded-2xl border-blue-500/30 space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="px-3 py-1.5 rounded-lg bg-blue-600 text-xs font-mono font-bold text-white">
-                  EXPECTED OUTPUT
+                  SAMPLE OUTPUT ANSWER
                 </div>
                 <span className="text-xs font-mono text-slate-400">Answer is checked after final submission</span>
               </div>
 
               <div className="rounded-xl border border-slate-700 bg-[#060b19] p-5 space-y-3">
                 <label htmlFor={`answer-${currentProblem.problemId}`} className="block text-xs font-mono uppercase text-slate-400">
-                  Expected output for the displayed sample input
+                  Type the exact output for the displayed sample input
                 </label>
-                <input
+                <textarea
                   id={`answer-${currentProblem.problemId}`}
                   value={answers[currentProblem.problemId] || ''}
                   onChange={event => setAnswers(previous => ({ ...previous, [currentProblem.problemId]: event.target.value }))}
                   disabled={submitting}
                   maxLength={500}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 font-mono text-sm text-cyan-200 outline-none focus:border-blue-400 disabled:opacity-60"
-                  placeholder="Type the output"
+                  rows={3}
+                  className="w-full resize-y rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 font-mono text-sm text-cyan-200 outline-none focus:border-blue-400 disabled:opacity-60"
+                  placeholder="Type only the expected output"
                 />
               </div>
 

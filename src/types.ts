@@ -180,6 +180,7 @@ export type Round3Question = Pick<
   'problemId' | 'title' | 'difficulty' | 'description' | 'points'
 > & {
   blanks: Round3BlankPrompt[];
+  starterCode: string;
 };
 
 export interface Round4Problem {
@@ -204,6 +205,8 @@ export type Round4Question = Pick<
   'sampleInput' | 'points'
 > & {
   description: string;
+  starterCode: string;
+  codePrompts: Round3BlankPrompt[];
 };
 
 export interface StarterCode {

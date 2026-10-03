@@ -24,40 +24,75 @@ export const round3AnswerKeys: Record<string, {
   'r3-p1': {
     blanks: [
       {
-        id: 'low-boundary',
-        prompt: 'Replace low = mid with the correct binary-search boundary update.',
-        accepted: ['low = mid + 1']
+        id: 'complement',
+        prompt: 'Calculate the value needed to complete the target sum.',
+        accepted: ['target - value']
       },
       {
-        id: 'high-boundary',
-        prompt: 'Replace high = mid with the correct binary-search boundary update.',
-        accepted: ['high = mid - 1']
+        id: 'store-index',
+        prompt: 'Store the current value and index for a later match.',
+        accepted: ['seen[value] = index']
       }
     ]
   },
   'r3-p2': {
     blanks: [
       {
-        id: 'max-initial',
-        prompt: 'Initialize max_so_far from the first value so all-negative arrays work.',
-        accepted: ['nums[0]', 'max(nums)']
-      },
-      {
-        id: 'current-initial',
-        prompt: 'Initialize current_max from the first value before processing the remaining values.',
-        accepted: ['nums[0]']
-      },
-      {
-        id: 'current-update',
-        prompt: 'Write the Kadane update expression for each value nums[i].',
-        accepted: ['max(nums[i], current_max + nums[i])', 'max(current_max + nums[i], nums[i])']
+        id: 'count-character',
+        prompt: 'Increase the frequency count for this character.',
+        accepted: [
+          'counts[char] = counts.get(char, 0) + 1',
+          'counts[char] = 1 if char not in counts else counts[char] + 1'
+        ]
       }
     ]
   }
 };
 
 export const round4AnswerKeys: Record<string, readonly string[]> = {
-  'r4-p1': ['3'],
+  'r4-p1': ['9'],
   'r4-p2': ['4'],
-  'r4-p3': ['100']
+  'r4-p3': ['40']
+};
+
+export const round4CodeAnswerKeys: Record<string, {
+  prompts: Array<{ id: string; prompt: string; accepted: readonly string[] }>;
+}> = {
+  'r4-p1': {
+    prompts: [
+      {
+        id: 'slide-window',
+        prompt: 'Update the running sum when the window moves one position right.',
+        accepted: ['window_sum += nums[i] - nums[i - k]']
+      },
+      {
+        id: 'update-best',
+        prompt: 'Keep the maximum window sum seen so far.',
+        accepted: ['best = max(best, window_sum)']
+      }
+    ]
+  },
+  'r4-p2': {
+    prompts: [
+      {
+        id: 'count-character',
+        prompt: 'Count each character before searching for the first unique one.',
+        accepted: ['counts[char] = counts.get(char, 0) + 1']
+      }
+    ]
+  },
+  'r4-p3': {
+    prompts: [
+      {
+        id: 'build-prefix',
+        prompt: 'Extend the prefix sum through the current value.',
+        accepted: ['prefix[i] = prefix[i - 1] + nums[i - 1]']
+      },
+      {
+        id: 'range-query',
+        prompt: 'Compute the inclusive range sum from left through right.',
+        accepted: ['prefix[right + 1] - prefix[left]']
+      }
+    ]
+  }
 };

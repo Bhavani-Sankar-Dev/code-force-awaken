@@ -6,7 +6,12 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { round1AnswerKeys, round2AnswerKeys, round3AnswerKeys, round4AnswerKeys } from "./answerKeys.ts";
+import {
+  round1AnswerKeys,
+  round2AnswerKeys,
+  round3AnswerKeys,
+  round4CodeAnswerKeys,
+} from "./answerKeys.ts";
 import { round1Questions } from "../src/data/competitionData.ts";
 import type { Participant } from "../src/types.ts";
 
@@ -409,13 +414,19 @@ test(
       assert.equal(round3.data.participant.currentRound, 4);
 
       await startRound(4);
-      for (const [problemId, answers] of Object.entries(round4AnswerKeys).slice(0, 2)) {
-        const verified = await jsonRequest<{ success: boolean }>(
+      const round4Entries = Object.entries(round4CodeAnswerKeys);
+      for (const [problemId, problem] of round4Entries.slice(0, 2)) {
+        const verified = await jsonRequest<{ success: boolean; allProblemsSolved: boolean }>(
           `${baseUrl}/api/round4/verify-problem`,
           {
             method: "POST",
             headers: authHeaders,
-            body: JSON.stringify({ problemId, answer: answers[0] }),
+            body: JSON.stringify({
+              problemId,
+              answers: Object.fromEntries(
+                problem.prompts.map((prompt) => [prompt.id, prompt.accepted[0]]),
+              ),
+            }),
           },
         );
         assert.equal(
@@ -423,7 +434,35 @@ test(
           true,
           `Round 4 verification failed (${verified.response.status}): ${JSON.stringify(verified.data)}`,
         );
+        assert.equal(verified.data.allProblemsSolved, false);
       }
+      const prematureFinal = await jsonRequest<{ error: string }>(
+        `${baseUrl}/api/round4/submit-final-code`,
+        {
+          method: "POST",
+          headers: authHeaders,
+          body: JSON.stringify({ enteredFinalCode: "134" }),
+        },
+      );
+      assert.equal(prematureFinal.response.status, 403);
+
+      const [lastProblemId, lastProblem] = round4Entries[2];
+      const lastVerified = await jsonRequest<{
+        success: boolean;
+        allProblemsSolved: boolean;
+      }>(`${baseUrl}/api/round4/verify-problem`, {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify({
+          problemId: lastProblemId,
+          answers: Object.fromEntries(
+            lastProblem.prompts.map((prompt) => [prompt.id, prompt.accepted[0]]),
+          ),
+        }),
+      });
+      assert.equal(lastVerified.data.success, true);
+      assert.equal(lastVerified.data.allProblemsSolved, true);
+
       const finalRound = await jsonRequest<{
         success: boolean;
         participant: Participant;
@@ -449,7 +488,7 @@ test(
       });
       assert.equal(afterRestart.response.status, 200);
       assert.equal(afterRestart.data.participant.currentRound, 5);
-      assert.equal(afterRestart.data.participant.totalScore, 100);
+      assert.equal(afterRestart.data.participant.totalScore, 105);
 
       const storedState = JSON.parse(await readFile(stateFile, "utf-8")) as {
         participants: Participant[];

@@ -31,7 +31,7 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
 }) => {
   const [problems, setProblems] = useState<Round4Question[]>([]);
   const [activeProblemIndex, setActiveProblemIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, Record<string, string>>>({});
   const [verifiedMap, setVerifiedMap] = useState<Record<string, { verified: boolean; output: number; marks: number }>>({});
   const [allProblemsSolved, setAllProblemsSolved] = useState(false);
   const [transformationRule, setTransformationRule] = useState<string | null>(null);
@@ -112,7 +112,7 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
         body: JSON.stringify({
           participantId: participant.participantId,
           problemId: currentProblem.problemId,
-          answer: answers[currentProblem.problemId] || ''
+          answers: answers[currentProblem.problemId] || {}
         })
       });
       const data = await res.json();
@@ -135,7 +135,7 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
         }
       } else {
         sound.playWarning();
-        alert(data.message || 'That output is not correct for the provided input.');
+        alert(data.message || 'One or more code fragments are incorrect.');
       }
     } catch (err) {
       console.error('Verification error:', err);
@@ -298,7 +298,7 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
             STAGE 4: THE GRAND FINALE
           </div>
           <h2 className="text-2xl sm:text-3xl font-orbitron font-extrabold text-white">
-            THREE CODES. ONE RULE. ONE FINAL KEY.
+            THREE ALGORITHMS. ONE RULE. ONE FINAL KEY.
           </h2>
           <p className="text-xs text-slate-400 font-sans">
             Work out each DSA challenge for its displayed input. Verified outputs unlock the Transformation Matrix rule used for the Final Key.
@@ -318,7 +318,7 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
                     : 'bg-slate-900 border-slate-800 text-slate-500'
                 }`}
               >
-                <div className="text-[10px] font-mono uppercase">PROG {i + 1}</div>
+                <div className="text-[10px] font-mono uppercase">PROBLEM {i + 1}</div>
                 <div className="text-lg font-orbitron font-bold mt-0.5">
                   {v?.verified ? v.output : '?'}
                 </div>
@@ -345,7 +345,7 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
                   : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700'
               }`}
             >
-              <span>PROGRAM {idx + 1}: {p.title}</span>
+              <span>PROBLEM {idx + 1}: {p.title}</span>
               {v?.verified ? (
                 <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-green-950 text-green-300 border border-green-500/40 font-bold">
                   VERIFIED ({v.output})
@@ -369,7 +369,7 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
               <div className="space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                   <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40">
-                    PROGRAM {activeProblemIndex + 1} OF 3
+                    PROBLEM {activeProblemIndex + 1} OF 3
                   </span>
                   <span className="text-amber-400 font-mono text-xs font-bold">
                     +5 PTS {isCurrentProblemVerified ? `(OUTPUT: ${verifiedMap[currentProblem.problemId].output})` : '(OUTPUT LOCKED)'}
@@ -389,25 +389,33 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
                   <div className="text-slate-500 uppercase">Sample Input:</div>
                   <pre className="text-cyan-300 bg-black/40 p-2 rounded">{currentProblem.sampleInput}</pre>
                 </div>
-                <p className="text-[11px] text-amber-200/80 font-mono">Enter the expected output for this input. The site checks a predefined answer; it does not execute submitted code.</p>
+                <div className="space-y-2">
+                  <div className="text-[11px] font-mono uppercase text-slate-400">
+                    Python starter code (complete the requested fragments)
+                  </div>
+                  <pre className="max-h-80 overflow-auto whitespace-pre rounded-xl border border-slate-800 bg-[#060b19] p-3 text-xs leading-relaxed text-cyan-200">
+                    {currentProblem.starterCode}
+                  </pre>
+                </div>
+                <p className="text-[11px] text-amber-200/80 font-mono">The server checks the requested fragments against predefined accepted expressions. It does not execute submitted Python.</p>
               </div>
 
               {isCurrentProblemVerified && (
                 <div className="p-3 rounded-xl bg-green-950/40 border border-green-500/40 flex items-center gap-2 text-xs font-mono text-green-300">
                   <CheckCircle2 className="w-4 h-4 text-green-400" />
-                  <span>Program verified! Extracted Output Value: </span>
+                  <span>Answer verified! Extracted output value: </span>
                   <span className="font-bold text-sm">{verifiedMap[currentProblem.problemId]?.output}</span>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Right Column: Expected-output answer */}
+          {/* Right Column: Python code fragments */}
           <div className="lg:col-span-7 space-y-4">
             <div className="cyber-card p-5 rounded-2xl border-amber-500/30 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="px-2.5 py-1 rounded-lg bg-amber-500 text-xs font-mono font-bold text-black">
-                  EXPECTED OUTPUT
+                  COMPLETE THE PYTHON LOGIC
                 </span>
                 <button
                   onClick={handleVerifyProblem}
@@ -423,18 +431,31 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
                 </button>
               </div>
 
-              <label className="block space-y-2">
-                <span className="text-xs font-mono uppercase text-slate-400">What output does the algorithm produce?</span>
-                <input
-                  value={answers[currentProblem.problemId] || ''}
-                  onChange={event => setAnswers(previous => ({ ...previous, [currentProblem.problemId]: event.target.value }))}
-                  disabled={isCurrentProblemVerified || verifying}
-                  maxLength={500}
-                  className="w-full rounded-lg border border-slate-700 bg-[#060b19] px-4 py-3 font-mono text-sm text-amber-200 outline-none focus:border-amber-400 disabled:opacity-60"
-                  placeholder="Enter the expected output"
-                />
-              </label>
-              <p className="text-xs text-slate-400">This output question is an answer-checking simplification, not a substitute for running a complete program against multiple test cases.</p>
+              <div className="space-y-4">
+                {currentProblem.codePrompts.map((codePrompt, index) => (
+                  <label key={codePrompt.id} className="block space-y-2">
+                    <span className="block text-xs font-mono text-slate-300">
+                      {index + 1}. {codePrompt.prompt}
+                    </span>
+                    <textarea
+                      value={answers[currentProblem.problemId]?.[codePrompt.id] || ''}
+                      onChange={event => setAnswers(previous => ({
+                        ...previous,
+                        [currentProblem.problemId]: {
+                          ...(previous[currentProblem.problemId] || {}),
+                          [codePrompt.id]: event.target.value
+                        }
+                      }))}
+                      disabled={isCurrentProblemVerified || verifying}
+                      maxLength={500}
+                      rows={2}
+                      className="w-full resize-y rounded-lg border border-slate-700 bg-[#060b19] px-4 py-3 font-mono text-sm text-amber-200 outline-none focus:border-amber-400 disabled:opacity-60"
+                      placeholder="Enter a Python code fragment"
+                    />
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-slate-400">Accepted fragments are checked by the server; arbitrary Python is not executed.</p>
             </div>
           </div>
         </div>
@@ -451,28 +472,28 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
             CALCULATE THE IMPERIAL MASTER KEY
           </h3>
           <p className="text-xs text-slate-400 max-w-lg mx-auto">
-            Once all three programs are verified, the transformation rule is unlocked. Apply the rule to calculate the Final Code.
+            Once all three code-fragment questions are verified, the transformation rule is unlocked. Apply it to the three displayed sample outputs to calculate the Final Code.
           </p>
         </div>
 
         {/* 3 Extracted Values Pill */}
         <div className="flex flex-wrap items-center justify-center gap-4">
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-center min-w-[130px]">
-            <div className="text-[10px] font-mono text-slate-500 uppercase">Program 1 Output</div>
+            <div className="text-[10px] font-mono text-slate-500 uppercase">Problem 1 Output</div>
             <div className="text-2xl font-orbitron font-bold text-amber-300 mt-1">
               {verifiedMap['r4-p1']?.verified ? verifiedMap['r4-p1'].output : 'LOCKED'}
             </div>
           </div>
           <div className="text-slate-600 font-bold text-xl">+</div>
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-center min-w-[130px]">
-            <div className="text-[10px] font-mono text-slate-500 uppercase">Program 2 Output</div>
+            <div className="text-[10px] font-mono text-slate-500 uppercase">Problem 2 Output</div>
             <div className="text-2xl font-orbitron font-bold text-amber-300 mt-1">
               {verifiedMap['r4-p2']?.verified ? verifiedMap['r4-p2'].output : 'LOCKED'}
             </div>
           </div>
           <div className="text-slate-600 font-bold text-xl">+</div>
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-center min-w-[130px]">
-            <div className="text-[10px] font-mono text-slate-500 uppercase">Program 3 Output</div>
+            <div className="text-[10px] font-mono text-slate-500 uppercase">Problem 3 Output</div>
             <div className="text-2xl font-orbitron font-bold text-amber-300 mt-1">
               {verifiedMap['r4-p3']?.verified ? verifiedMap['r4-p3'].output : 'LOCKED'}
             </div>
@@ -496,7 +517,7 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
         ) : (
           <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-center max-w-lg mx-auto text-xs font-mono text-slate-400 flex items-center justify-center gap-2">
             <Lock className="w-4 h-4 text-slate-500" />
-            Complete and verify all three coding programs to reveal the transformation rule.
+            Complete and verify all three coding-fragment questions to reveal the transformation rule.
           </div>
         )}
 
@@ -508,7 +529,7 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
           <input
             type="text"
             disabled={!allProblemsSolved}
-            placeholder={allProblemsSolved ? "e.g. 134" : "Verify all 3 programs first"}
+            placeholder={allProblemsSolved ? "e.g. 134" : "Verify all 3 problems first"}
             value={enteredFinalCode}
             onChange={e => setEnteredFinalCode(e.target.value)}
             className="w-full text-center text-2xl sm:text-3xl font-orbitron font-black tracking-widest py-3 rounded-xl bg-slate-950 border-2 border-amber-400 text-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-300 shadow-lg shadow-amber-500/20 disabled:opacity-50"
