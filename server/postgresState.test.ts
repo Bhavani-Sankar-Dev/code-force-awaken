@@ -5,6 +5,7 @@ import {
   ensurePostgresStateSchema,
   insertInitialPostgresState,
   loadPostgresState,
+  persistPostgresState,
 } from "./postgresState.ts";
 import { registrationKey } from "./registrationIdentity.ts";
 
@@ -87,6 +88,86 @@ test("initial migration refuses to overwrite auxiliary indexed data", async () =
   assert.equal(queries.length, 2);
   assert.match(queries[1].text, /participant_registrations/);
   assert.match(queries[1].text, /participant_attempts/);
+});
+
+test("PostgreSQL state encoding preserves registration keys and orphan attempts", async () => {
+  const state = {
+    participants: [],
+    registrationKeys: ["college\u0000roll", "literal\\u0000"],
+    attempts: {
+      historicalOwner: {
+        rounds: {
+          "1": { startedAt: "2026-01-01T00:00:00.000Z", durationSeconds: 30 },
+        },
+      },
+    },
+  };
+  const { client, queries } = fakeClient(() => ({ rows: [] }));
+
+  await insertInitialPostgresState(client, state);
+
+  const insert = queries.find((query) =>
+    query.text.startsWith("INSERT INTO competition_state"),
+  );
+  assert.ok(insert);
+  const storedState = JSON.parse(String(insert.values?.[0]));
+  assert.deepEqual(storedState.registrationKeys, {
+    encoding: "utf16le-base64-v1",
+    values: state.registrationKeys.map((key) =>
+      Buffer.from(key, "utf16le").toString("base64"),
+    ),
+  });
+  assert.equal(JSON.stringify(storedState).includes("\u0000"), false);
+
+  const attemptIndexInsert = queries.find((query) =>
+    query.text.includes("INSERT INTO participant_attempts"),
+  );
+  assert.ok(attemptIndexInsert);
+  assert.equal(
+    JSON.parse(String(attemptIndexInsert.values?.[0]))[0].participant_id,
+    "historicalOwner",
+  );
+
+  const { client: readClient } = fakeClient((text) =>
+    text.startsWith("SELECT payload")
+      ? { rows: [{ payload: storedState }] }
+      : { rows: [] },
+  );
+  assert.deepEqual(await loadPostgresState(readClient), state);
+
+  const { client: malformedClient } = fakeClient((text) =>
+    text.startsWith("SELECT payload")
+      ? {
+          rows: [
+            {
+              payload: {
+                registrationKeys: {
+                  encoding: "utf16le-base64-v1",
+                  values: ["not valid base64"],
+                },
+              },
+            },
+          ],
+        }
+      : { rows: [] },
+  );
+  await assert.rejects(
+    loadPostgresState(malformedClient),
+    /registration key encoding is invalid/,
+  );
+
+  const { client: updateClient, queries: updateQueries } = fakeClient(() => ({
+    rows: [],
+  }));
+  await persistPostgresState(updateClient, state);
+  const update = updateQueries.find((query) =>
+    query.text.includes("UPDATE competition_state"),
+  );
+  assert.ok(update);
+  assert.deepEqual(
+    JSON.parse(String(update.values?.[0])).registrationKeys,
+    storedState.registrationKeys,
+  );
 });
 
 test("state loading uses a locked database row", async () => {

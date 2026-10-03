@@ -1,6 +1,49 @@
 import type { Pool, PoolClient } from "pg";
 import { normalizeIdentityPart } from "./registrationIdentity.ts";
 
+const REGISTRATION_KEYS_ENCODING = "utf16le-base64-v1";
+
+function encodeStateForPostgres(
+  state: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!Array.isArray(state.registrationKeys)) return state;
+  return {
+    ...state,
+    registrationKeys: {
+      encoding: REGISTRATION_KEYS_ENCODING,
+      values: state.registrationKeys.map((value: unknown) =>
+        typeof value === "string"
+          ? Buffer.from(value, "utf16le").toString("base64")
+          : value,
+      ),
+    },
+  };
+}
+
+function decodeStateFromPostgres(
+  state: Record<string, unknown>,
+): Record<string, unknown> {
+  const encoded = state.registrationKeys;
+  if (
+    !encoded ||
+    typeof encoded !== "object" ||
+    Array.isArray(encoded) ||
+    (encoded as Record<string, unknown>).encoding !== REGISTRATION_KEYS_ENCODING ||
+    !Array.isArray((encoded as Record<string, unknown>).values)
+  ) {
+    return state;
+  }
+  const values = (encoded as { values: unknown[] }).values.map((value) => {
+    if (typeof value !== "string") return value;
+    const bytes = Buffer.from(value, "base64");
+    if (bytes.toString("base64") !== value || bytes.length % 2 !== 0) {
+      throw new Error("Persistent registration key encoding is invalid.");
+    }
+    return bytes.toString("utf16le");
+  });
+  return { ...state, registrationKeys: values };
+}
+
 export async function ensurePostgresStateSchema(pool: Pool): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS competition_state (
@@ -40,7 +83,7 @@ export async function loadPostgresState(
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new Error("Persistent competition state must be a JSON object.");
   }
-  return payload as Record<string, unknown>;
+  return decodeStateFromPostgres(payload as Record<string, unknown>);
 }
 
 export async function hasPostgresState(client: PoolClient): Promise<boolean> {
@@ -77,7 +120,7 @@ export async function insertInitialPostgresState(
   }
   await client.query(
     "INSERT INTO competition_state (singleton, payload) VALUES (true, $1::jsonb)",
-    [JSON.stringify(state)],
+    [JSON.stringify(encodeStateForPostgres(state))],
   );
   await synchronizeIndexedState(client, state);
 }
@@ -90,7 +133,7 @@ export async function persistPostgresState(
     `UPDATE competition_state
      SET payload = $1::jsonb, updated_at = now()
      WHERE singleton = true`,
-    [JSON.stringify(state)],
+    [JSON.stringify(encodeStateForPostgres(state))],
   );
   if (result.rowCount !== 1) {
     throw new Error(
