@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Participant, Round3Question } from '../types';
 import { sound } from '../utils/sound';
+import { apiFetch } from '../utils/api';
 import { 
   Terminal, 
   Send, 
@@ -47,7 +48,7 @@ export const Round3Arena: React.FC<Round3ArenaProps> = ({
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/timer/start', {
+    apiFetch('/api/timer/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ round: 3 })
@@ -69,7 +70,7 @@ export const Round3Arena: React.FC<Round3ArenaProps> = ({
   useEffect(() => {
     const fetchProblems = async () => {
       try {
-        const res = await fetch('/api/round3/problems');
+        const res = await apiFetch('/api/round3/problems');
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Could not load Round 3 questions.');
         if (data.problems) {
@@ -113,7 +114,7 @@ export const Round3Arena: React.FC<Round3ArenaProps> = ({
     setSubmitting(true);
 
     try {
-      const res = await fetch('/api/round3/submit', {
+      const res = await apiFetch('/api/round3/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

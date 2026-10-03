@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LeaderboardEntry } from '../types';
 import { sound } from '../utils/sound';
+import { apiFetch } from '../utils/api';
 import { 
   Trophy, 
   Search, 
@@ -24,7 +25,7 @@ export const LeaderboardView: React.FC = () => {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch('/api/leaderboard');
+      const res = await apiFetch('/api/leaderboard');
       if (!res.ok) throw new Error('Could not load the leaderboard.');
       const data = await res.json();
       setIsPublished(data.isPublished ?? false);

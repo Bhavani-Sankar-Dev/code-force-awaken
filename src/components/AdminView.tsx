@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Participant, EventConfig } from '../types';
 import { sound } from '../utils/sound';
+import { apiFetch } from '../utils/api';
 import { 
   Lock,
   Settings,
@@ -71,7 +72,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onRefreshState }) => {
     setLoading(true);
     setDataError('');
     try {
-      const res = await fetch('/api/admin/data', {
+      const res = await apiFetch('/api/admin/data', {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.status === 401) {
@@ -103,7 +104,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onRefreshState }) => {
 
   useEffect(() => {
     if (token) {
-      fetch('/api/admin/session', {
+      apiFetch('/api/admin/session', {
         headers: { Authorization: `Bearer ${token}` }
       })
         .then(res => {
@@ -247,7 +248,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onRefreshState }) => {
     sound.playClick();
 
     try {
-      const res = await fetch('/api/admin/login', {
+      const res = await apiFetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ passcode })
@@ -269,7 +270,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onRefreshState }) => {
   const handleLogout = async () => {
     sound.playClick();
     try {
-      await fetch('/api/admin/logout', {
+      await apiFetch('/api/admin/logout', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -284,7 +285,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onRefreshState }) => {
   const handleToggleLeaderboard = async () => {
     sound.playClick();
     try {
-      await fetch('/api/admin/toggle-leaderboard', {
+      await apiFetch('/api/admin/toggle-leaderboard', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -298,7 +299,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onRefreshState }) => {
   const handleSaveConfig = async () => {
     sound.playClick();
     try {
-      const res = await fetch('/api/admin/update-config', {
+      const res = await apiFetch('/api/admin/update-config', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -328,7 +329,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onRefreshState }) => {
   const handleToggleSlotOverride = async (slotId: string, currentVal: boolean) => {
     sound.playClick();
     try {
-      await fetch('/api/admin/update-slot', {
+      await apiFetch('/api/admin/update-slot', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -349,7 +350,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onRefreshState }) => {
   const handleTestModeAction = async (action: string, participantId?: string) => {
     sound.playClick();
     try {
-      await fetch('/api/admin/test-mode-action', {
+      await apiFetch('/api/admin/test-mode-action', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -369,7 +370,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ onRefreshState }) => {
     if (!window.confirm(`Remove participant ${name} (${id})? This cannot be undone.`)) return;
     sound.playWarning();
     try {
-      await fetch(`/api/admin/participants/${encodeURIComponent(id)}`, {
+      await apiFetch(`/api/admin/participants/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });

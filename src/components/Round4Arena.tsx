@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Participant, Round4Question } from '../types';
 import { sound } from '../utils/sound';
+import { apiFetch } from '../utils/api';
 import { 
   Key, 
   Sparkles, 
@@ -48,7 +49,7 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
   } | null>(null);
 
   useEffect(() => {
-    fetch('/api/timer/start', {
+    apiFetch('/api/timer/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ round: 4 })
@@ -63,7 +64,7 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
   useEffect(() => {
     const fetchChallenge = async () => {
       try {
-        const res = await fetch('/api/round4/challenge');
+        const res = await apiFetch('/api/round4/challenge');
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Could not load Round 4 questions.');
         const probs: Round4Question[] = data.problems || [];
@@ -71,7 +72,7 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
 
         // Fetch participant session
         if (participant.participantId) {
-          const sessRes = await fetch(`/api/round4/session/${participant.participantId}`);
+          const sessRes = await apiFetch(`/api/round4/session/${participant.participantId}`);
           if (sessRes.ok) {
             const sess = await sessRes.json();
             const vMap: Record<string, { verified: boolean; output: number; marks: number }> = {};
@@ -105,7 +106,7 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
     setVerifying(true);
 
     try {
-      const res = await fetch('/api/round4/verify-problem', {
+      const res = await apiFetch('/api/round4/verify-problem', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -150,7 +151,7 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
     setTransmitting(true);
 
     try {
-      const res = await fetch('/api/round4/submit-final-code', {
+      const res = await apiFetch('/api/round4/submit-final-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -189,7 +190,7 @@ export const Round4Arena: React.FC<Round4ArenaProps> = ({
       forceSubmittingRef.current = true;
       setTransmitting(true);
       try {
-        const res = await fetch('/api/round4/force-submit', { method: 'POST' });
+        const res = await apiFetch('/api/round4/force-submit', { method: 'POST' });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Could not submit Round 4.');
         if (data.participant) onUpdateParticipant(data.participant);

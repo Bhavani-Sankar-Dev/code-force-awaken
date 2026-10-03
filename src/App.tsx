@@ -14,6 +14,7 @@ import { Round3Arena } from './components/Round3Arena';
 import { Round4Arena } from './components/Round4Arena';
 import { LeaderboardView } from './components/LeaderboardView';
 import { AdminView } from './components/AdminView';
+import { apiFetch } from './utils/api';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<string>('home');
@@ -27,7 +28,7 @@ export default function App() {
   // Sync state with backend
   const fetchState = async () => {
     try {
-      const res = await fetch('/api/state');
+      const res = await apiFetch('/api/state');
       if (res.ok) {
         const data = await res.json();
         if (data.slots) setSlots(data.slots);
@@ -57,7 +58,7 @@ export default function App() {
 
   // Restore the server-owned session through its HttpOnly cookie.
   useEffect(() => {
-    fetch('/api/session')
+    apiFetch('/api/session')
       .then(async res => {
         if (res.status === 401) return;
         const data = await res.json();
@@ -82,7 +83,7 @@ export default function App() {
   const handleLogout = () => {
     setParticipant(null);
     setRecoveryCode(null);
-    fetch('/api/logout', { method: 'POST' })
+    apiFetch('/api/logout', { method: 'POST' })
       .then(res => {
         if (!res.ok) throw new Error('Could not end the participant session.');
       })

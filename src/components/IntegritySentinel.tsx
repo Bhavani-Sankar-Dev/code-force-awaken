@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Participant } from '../types';
 import { sound } from '../utils/sound';
+import { apiFetch } from '../utils/api';
 import { ShieldAlert, AlertTriangle, X } from 'lucide-react';
 
 interface IntegritySentinelProps {
@@ -37,7 +38,7 @@ export const IntegritySentinel: React.FC<IntegritySentinelProps> = ({
       sound.playWarning();
 
       try {
-        const res = await fetch('/api/integrity/violation', {
+        const res = await apiFetch('/api/integrity/violation', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

@@ -1,10 +1,11 @@
 import "dotenv/config";
 import express from "express";
 import type { NextFunction, Request, Response } from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
 import { createHash, randomBytes, randomUUID } from "crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { Pool, type PoolClient } from "pg";
 import {
   initialSlots,
   initialEventConfig,
@@ -23,22 +24,37 @@ import {
   round3AnswerKeys,
   round4AnswerKeys,
 } from "./server/answerKeys.ts";
+import { registrationKey } from "./server/registrationIdentity.ts";
+import {
+  ensurePostgresStateSchema,
+  loadPostgresState,
+  persistPostgresState,
+} from "./server/postgresState.ts";
 
-const app = express();
-const DEFAULT_PORT = 3000;
-const PORT = process.env.PORT ? Number(process.env.PORT) : DEFAULT_PORT;
-if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
-  throw new Error(
-    `Invalid PORT value "${process.env.PORT}". Set PORT to a number between 1 and 65535.`,
-  );
-}
+export const app = express();
+const isNetlifyRuntime =
+  process.env.NETLIFY === "true" ||
+  Boolean(process.env.URL && process.env.SITE_ID);
+const usePostgresState = isNetlifyRuntime;
 
-app.use(express.json({ limit: "64kb" }));
-
-// In-Memory Database with optional file backup
 const DB_FILE = path.resolve(
   process.env.DB_FILE || path.join(process.cwd(), "db_state.json"),
 );
+const isProduction =
+  process.env.NODE_ENV === "production" || usePostgresState;
+if (process.env.NODE_ENV === "production" && !usePostgresState) {
+  if (!process.env.DB_FILE || !path.isAbsolute(process.env.DB_FILE)) {
+    throw new Error(
+      "Production requires DB_FILE to be an absolute path on the persistent volume.",
+    );
+  }
+  if (!fs.existsSync(DB_FILE)) {
+    throw new Error(
+      `Production state file does not exist at DB_FILE (${DB_FILE}); refusing to start with seed data.`,
+    );
+  }
+}
+
 const SESSION_COOKIE = "codeforce_participant_session";
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const REGISTRATION_KEYS = new Set([
@@ -52,13 +68,44 @@ const REGISTRATION_KEYS = new Set([
   "accessCodeHashes",
   "registrationKeys",
   "attempts",
+  "adminTokenHashes",
 ]);
+type PostgresRequest = { dirty: boolean };
+const postgresRequestStorage = new AsyncLocalStorage<PostgresRequest>();
+let postgresPool: Pool | undefined;
+let postgresSchemaReady: Promise<void> | undefined;
+const configuredFrontendOrigins = (process.env.FRONTEND_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const frontendOrigins = new Set(
+  isProduction
+    ? configuredFrontendOrigins
+    : [
+        ...configuredFrontendOrigins,
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+      ],
+);
+if (isProduction && frontendOrigins.size === 0) {
+  throw new Error(
+    "Production requires FRONTEND_ORIGINS with the exact HTTPS frontend origin.",
+  );
+}
 
 let slots: Slot[] = [...initialSlots];
 let eventConfig: EventConfig = { ...initialEventConfig };
 let r4Config = { ...round4Config };
 let participants: Participant[] = [...initialParticipants];
-let adminTokens = new Set<string>();
+let adminTokenHashes = new Set<string>();
+const participantCookieOptions = {
+  httpOnly: true,
+  sameSite: "strict" as const,
+  secure: isProduction,
+  path: "/",
+};
 let credentials: Record<string, string> = {};
 let participantSessions = new Map<
   string,
@@ -89,20 +136,36 @@ let round4Sessions: Record<
   "TEST-001": { p1Verified: false, p2Verified: false, p3Verified: false },
 };
 
-function normalizeIdentityPart(value: string): string {
-  return value
-    .normalize("NFKC")
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLocaleLowerCase("en-US");
-}
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const origin = req.get("Origin");
+  if (origin) {
+    if (!frontendOrigins.has(origin)) {
+      return res.status(403).json({ error: "Origin not allowed." });
+    }
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.vary("Origin");
+  }
 
-function registrationKey(college: string, rollNumber: string): string {
-  return `${normalizeIdentityPart(college)}\u0000${normalizeIdentityPart(rollNumber)}`;
-}
+  if (req.method === "OPTIONS") {
+    if (origin) {
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+      res.setHeader(
+        "Access-Control-Allow-Headers",
+        "Content-Type, Authorization",
+      );
+      res.setHeader("Access-Control-Max-Age", "600");
+    }
+    return res.sendStatus(204);
+  }
+
+  next();
+});
+
+app.use(express.json({ limit: "64kb" }));
 
 function participantIdentityKey(name: string, college: string): string {
-  return `${normalizeIdentityPart(college)}\u0000${normalizeIdentityPart(name)}`;
+  return registrationKey(college, name);
 }
 
 function hashSecret(value: string): string {
@@ -129,6 +192,13 @@ function applyPersistedState(data: Record<string, unknown>): void {
   }
   if (data.credentials && typeof data.credentials === "object") {
     credentials = data.credentials as Record<string, string>;
+  if (Array.isArray(data.adminTokenHashes)) {
+    adminTokenHashes = new Set(
+      data.adminTokenHashes.filter(
+        (tokenHash): tokenHash is string => typeof tokenHash === "string",
+      ),
+    );
+  }
   }
   if (data.accessCodeHashes && typeof data.accessCodeHashes === "object") {
     accessCodeHashes = data.accessCodeHashes as Record<string, string>;
@@ -181,6 +251,9 @@ function currentPersistedState(): Record<string, unknown> {
     accessCodeHashes,
     registrationKeys: [...registrationKeys],
     attempts,
+    ...(usePostgresState
+      ? { adminTokenHashes: [...adminTokenHashes] }
+      : {}),
   };
 }
 
@@ -222,6 +295,16 @@ if (!lastPersistedState)
   lastPersistedState = clonePersistedState(currentPersistedState());
 
 function saveDB() {
+  if (usePostgresState) {
+    const transaction = postgresRequestStorage.getStore();
+    if (!transaction) {
+      throw new Error(
+        "Competition state can only be saved inside a database-backed API request.",
+      );
+    }
+    transaction.dirty = true;
+    return;
+  }
   if (fs.existsSync(DB_FILE) && !lastPersistedState) {
     throw new Error(
       "Cannot persist state because the existing db_state.json was not loaded.",
@@ -247,6 +330,7 @@ function saveDB() {
         console.error("Failed to close temporary state file:", closeError);
       }
     }
+
     if (fs.existsSync(temporaryFile)) {
       try {
         fs.unlinkSync(temporaryFile);
@@ -259,12 +343,158 @@ function saveDB() {
   }
 }
 
+function restorePostgresState(state: Record<string, unknown>): void {
+  slots = [...initialSlots];
+  eventConfig = { ...initialEventConfig };
+  r4Config = { ...round4Config };
+  participants = [...initialParticipants];
+  adminTokenHashes = new Set<string>();
+  credentials = {};
+  participantSessions = new Map();
+  accessCodeHashes = {};
+  registrationKeys = new Set<string>();
+  attempts = {};
+  preservedState = Object.fromEntries(
+    Object.entries(state).filter(([key]) => !REGISTRATION_KEYS.has(key)),
+  );
+  round4Sessions = {
+    "TEST-001": { p1Verified: false, p2Verified: false, p3Verified: false },
+  };
+  applyPersistedState(state);
+}
+
+function getPostgresPool(): Pool {
+  const connectionString = process.env.DATABASE_URL?.trim();
+  if (!connectionString) {
+    throw new Error("DATABASE_URL must be configured for Netlify production.");
+  }
+  postgresPool ??= new Pool({ connectionString, max: 1 });
+  return postgresPool;
+}
+
+async function initializePostgresSchema(): Promise<Pool> {
+  const pool = getPostgresPool();
+  if (!postgresSchemaReady) {
+    postgresSchemaReady = ensurePostgresStateSchema(pool).catch((error) => {
+      postgresSchemaReady = undefined;
+      throw error;
+    });
+  }
+  await postgresSchemaReady;
+  return pool;
+}
+
+function logDatabaseFailure(context: string, error: unknown): void {
+  const code =
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof error.code === "string"
+      ? error.code
+      : undefined;
+  console.error(context, {
+    errorType: error instanceof Error ? error.name : typeof error,
+    ...(code ? { databaseCode: code } : {}),
+  });
+}
+
+if (usePostgresState) {
+  app.use("/api", async (_req: Request, res: Response, next: NextFunction) => {
+    let client: PoolClient | undefined;
+    try {
+      const pool = await initializePostgresSchema();
+      client = await pool.connect();
+      await client.query("BEGIN");
+      const storedState = await loadPostgresState(client);
+      if (!storedState) {
+        await client.query("ROLLBACK");
+        client.release();
+        client = undefined;
+        return res.status(503).json({
+          error:
+            "Persistent competition storage is not initialized. Import the existing db_state.json before accepting registrations.",
+        });
+      }
+
+      const previousState = clonePersistedState(storedState);
+      restorePostgresState(previousState);
+      lastPersistedState = clonePersistedState(previousState);
+      const requestClient = client;
+      const transaction: PostgresRequest = { dirty: false };
+      const sendJson = res.json.bind(res);
+      let responseStarted = false;
+
+      res.json = ((body: unknown) => {
+        if (responseStarted) return res;
+        responseStarted = true;
+        void (async () => {
+          let commitError: unknown;
+          try {
+            if (transaction.dirty) {
+              await persistPostgresState(
+                requestClient,
+                currentPersistedState(),
+              );
+            } else {
+              restorePostgresState(previousState);
+            }
+            await requestClient.query("COMMIT");
+            if (transaction.dirty) {
+              lastPersistedState = clonePersistedState(
+                currentPersistedState(),
+              );
+            }
+          } catch (error) {
+            commitError = error;
+            try {
+              await requestClient.query("ROLLBACK");
+            } catch (rollbackError) {
+              logDatabaseFailure("Database rollback failed:", rollbackError);
+            }
+            restorePostgresState(previousState);
+          } finally {
+            requestClient.release();
+          }
+
+          if (commitError) {
+            logDatabaseFailure("Competition state commit failed:", commitError);
+            res.removeHeader("Set-Cookie");
+            res.status(503);
+            sendJson({
+              error:
+                "Persistent competition storage could not safely complete the request.",
+            });
+            return;
+          }
+          sendJson(body);
+        })();
+        return res;
+      }) as Response["json"];
+
+      postgresRequestStorage.run(transaction, next);
+    } catch (error) {
+      if (client) {
+        try {
+          await client.query("ROLLBACK");
+        } catch (rollbackError) {
+          logDatabaseFailure("Database rollback failed:", rollbackError);
+        }
+        client.release();
+      }
+      logDatabaseFailure("Persistent competition storage request failed:", error);
+      res.status(503).json({
+        error: "Persistent competition storage is currently unavailable.",
+      });
+    }
+  });
+}
+
 // Admin Token Middleware
 function checkAdminAuth(req: Request): boolean {
   const auth = req.headers.authorization;
   if (!auth) return false;
   const token = auth.replace(/^Bearer\s+/i, "").trim();
-  return adminTokens.has(token);
+  return adminTokenHashes.has(hashSecret(token));
 }
 
 function getParticipant(req: Request, res: Response): Participant | undefined {
@@ -282,11 +512,7 @@ function getParticipant(req: Request, res: Response): Participant | undefined {
     : undefined;
   if (session && session.expiresAt <= Date.now()) {
     participantSessions.delete(hashSecret(token!));
-    res.clearCookie(SESSION_COOKIE, {
-      httpOnly: true,
-      sameSite: "strict",
-      path: "/",
-    });
+    res.clearCookie(SESSION_COOKIE, { ...participantCookieOptions });
     res
       .status(401)
       .json({
@@ -313,10 +539,7 @@ function getParticipant(req: Request, res: Response): Participant | undefined {
 
 function setParticipantCookie(res: Response, token: string): void {
   res.cookie(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "strict",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
+    ...participantCookieOptions,
     maxAge: SESSION_MAX_AGE_MS,
   });
 }
@@ -676,11 +899,7 @@ app.post("/api/logout", (req: Request, res: Response) => {
     req.headers.authorization?.replace(/^Bearer\s+/i, "").trim() || cookieToken;
   if (token) participantSessions.delete(hashSecret(token));
   saveDB();
-  res.clearCookie(SESSION_COOKIE, {
-    httpOnly: true,
-    sameSite: "strict",
-    path: "/",
-  });
+  res.clearCookie(SESSION_COOKIE, { ...participantCookieOptions });
   res.json({ success: true });
 });
 
@@ -1406,7 +1625,8 @@ app.post("/api/admin/login", (req: Request, res: Response) => {
 
   if (passcode === configuredPasscode) {
     const token = randomBytes(32).toString("base64url");
-    adminTokens.add(token);
+    adminTokenHashes.add(hashSecret(token));
+    if (usePostgresState) saveDB();
     return res.json({ success: true, token });
   }
   return res.status(401).json({ error: "Invalid passcode." });
@@ -1417,7 +1637,8 @@ app.post("/api/admin/logout", (req: Request, res: Response) => {
   const auth = req.headers.authorization;
   if (auth) {
     const token = auth.replace(/^Bearer\s+/i, "").trim();
-    adminTokens.delete(token);
+    adminTokenHashes.delete(hashSecret(token));
+    if (usePostgresState) saveDB();
   }
   res.json({ success: true });
 });
@@ -1681,37 +1902,3 @@ app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
   if (res.headersSent) return next(err);
   res.status(500).json({ error: "Unable to complete the request safely." });
 });
-
-// Server Initialization
-async function startServer() {
-  if (process.env.NODE_ENV === "production") {
-    app.use(express.static(path.resolve(process.cwd(), "dist")));
-    app.get("*", (req: Request, res: Response) => {
-      res.sendFile(path.resolve(process.cwd(), "dist", "index.html"));
-    });
-  } else {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  }
-
-  const server = app.listen(PORT, "0.0.0.0", () => {
-    console.log(
-      `CODE FORCE AWAKEN website available at http://localhost:${PORT}`,
-    );
-  });
-  server.on("error", (err: NodeJS.ErrnoException) => {
-    if (err.code === "EADDRINUSE") {
-      console.error(
-        `Port ${PORT} is already in use. Stop the other server or set PORT to another available port.`,
-      );
-    } else {
-      console.error("Failed to start CODE FORCE AWAKEN server:", err);
-    }
-    process.exitCode = 1;
-  });
-}
-
-startServer();

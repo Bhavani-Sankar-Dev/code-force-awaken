@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Participant } from '../types';
 import { sound } from '../utils/sound';
+import { apiFetch } from '../utils/api';
 import { KeyRound, Terminal, AlertCircle, ArrowRight } from 'lucide-react';
 
 interface LoginViewProps {
@@ -21,7 +22,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, setCurrent
     setErrorMessage(null);
     setLoading(true);
     try {
-      const res = await fetch('/api/login', {
+      const res = await apiFetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ participantCode: participantCode.trim() })

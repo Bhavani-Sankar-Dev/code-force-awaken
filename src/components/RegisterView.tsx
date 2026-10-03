@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Participant } from '../types';
 import { sound } from '../utils/sound';
+import { apiFetch } from '../utils/api';
 import { User, School, AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react';
 
 interface RegisterViewProps {
@@ -23,7 +24,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({
     setSubmitting(true);
 
     try {
-      const res = await fetch('/api/register', {
+      const res = await apiFetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
